@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "newt_detection"
+version = "0.1.0"
+description = ""
+authors = []
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "3.12.*"
+opencv-python = "^4.12.0.88"
+numpy = "^2.2.6"
+torch = "^2.8.0"
+torchvision = "0.23.0"
+notebook = "^7.4.7"
+matplotlib = "^3.10.7"
+scipy = "^1.16.2"
+pillow = "^12.0.0"
+tqdm = "^4.67.1"
+segmentation_models_pytorch = "^0.5.0"
+albumentations = "^2.0.8"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
