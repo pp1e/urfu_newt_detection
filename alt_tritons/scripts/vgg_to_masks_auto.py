@@ -9,6 +9,10 @@ DATA_ROOT = Path("dataset")
 OUTPUT_ROOT = Path("masks_manual")
 OUTPUT_ROOT.mkdir(exist_ok=True)
 
+# Прозрачность при наложении маски
+MASK_ALPHA = 0.4
+MASK_COLOR = (0, 0, 255)  # красный (BGR)
+
 def process_vgg_json(json_path: Path, img_dir: Path, out_dir: Path):
     with open(json_path, "r") as f:
         vgg_data = json.load(f)
@@ -59,8 +63,19 @@ def process_vgg_json(json_path: Path, img_dir: Path, out_dir: Path):
         if mask.sum() == 0:
             continue  # пустая маска
 
-        out_path = out_dir / f"{Path(filename).stem}_mask.png"
-        cv2.imwrite(str(out_path), mask)
+        # === Сохраняем маску ===
+        mask_path = out_dir / f"{Path(filename).stem}_mask.png"
+        cv2.imwrite(str(mask_path), mask)
+
+        # === Создаём наложение ===
+        overlay = img.copy()
+        overlay[mask > 0] = MASK_COLOR  # заливаем цветом область маски
+
+        blended = cv2.addWeighted(overlay, MASK_ALPHA, img, 1 - MASK_ALPHA, 0)
+        overlay_path = out_dir / f"{Path(filename).stem}_overlay.png"
+        cv2.imwrite(str(overlay_path), blended)
+
+
         saved += 1
 
     print(f"✅ {saved} масок сохранено в {out_dir}")
