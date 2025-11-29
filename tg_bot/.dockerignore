@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Poetry virtual environment
+.venv/
+
+# Byte-compiled / cache
+*.py[cod]
+*.so
+
+# Logs
+logs/
+*.log
+
+# Tests cache
+.pytest_cache/
+
+# Env files
+.env
+.env.*
+*.secret
+
+# IDE / system
+.git
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+docker-data/
+
+# Build artifacts
+dist/
+build/
+
+# Данные
+models/

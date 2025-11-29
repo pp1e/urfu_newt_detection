@@ -1,0 +1,12 @@
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: urfu-newt-detection-bot
+    restart: no
+    env_file:
+      - .env
+    volumes:
+      - ./models:/app/models
+    command: python main.py

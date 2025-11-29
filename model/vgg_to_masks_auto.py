@@ -5,7 +5,7 @@ import cv2
 from tqdm import tqdm
 
 # === НАСТРОЙКИ ===
-DATA_ROOT = Path("dataset")
+DATA_ROOT = Path("data")
 OUTPUT_ROOT = Path("masks_manual")
 OUTPUT_ROOT.mkdir(exist_ok=True)
 

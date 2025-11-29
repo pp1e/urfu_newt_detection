@@ -1,6 +1,6 @@
 from aiogram import Router, types
 from aiogram.filters import Command
-from urfu_bot.keyboards.choose_model_kb import choose_model_kb
+from bot.keyboards.choose_model_kb import choose_model_kb
 
 router = Router()
 

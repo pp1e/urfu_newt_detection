@@ -1,9 +1,9 @@
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 
-from urfu_bot.belly_detection.detect_belly import detect_belly
+from bot.belly_detection.detect_belly import detect_belly
 from aiogram.types import BufferedInputFile
-from urfu_bot.keyboards.start_over_kb import start_over_kb
+from bot.keyboards.start_over_kb import start_over_kb
 
 router = Router()
 

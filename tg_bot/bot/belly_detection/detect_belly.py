@@ -3,9 +3,9 @@ from io import BytesIO
 
 from PIL import Image
 
-from urfu_bot.belly_detection.create_overlay import create_overlay
-from urfu_bot.belly_detection.extract_belly import extract_belly_from_prediction
-from urfu_bot.belly_detection.predict_mask import predict_mask
+from bot.belly_detection.create_overlay import create_overlay
+from bot.belly_detection.extract_belly import extract_belly_from_prediction
+from bot.belly_detection.predict_mask import predict_mask
 
 @dataclass
 class BellyDetectionResult:
