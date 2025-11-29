@@ -6,7 +6,7 @@ router = Router()
 
 async def send_start_message(message: types.Message):
     await message.answer(
-        "Привет! Выбери тип тритона для анализа 🦎",
+        "Привет! Выбери тип тритона для анализа",
         reply_markup=choose_model_kb()
     )
 

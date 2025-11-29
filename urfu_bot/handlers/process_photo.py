@@ -1,6 +1,7 @@
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
-from urfu_bot.inference import predict_mask
+
+from urfu_bot.belly_detection.detect_belly import detect_belly
 from aiogram.types import BufferedInputFile
 from urfu_bot.keyboards.start_over_kb import start_over_kb
 
@@ -16,13 +17,9 @@ async def handle_image(message: types.Message, state: FSMContext):
         await message.answer("Сначала выбери модель через /start")
         return
 
-    # ================================
-    # 1) Если отправлено КАК ФАЙЛ
-    # ================================
     if message.document:
         doc = message.document
 
-        # проверяем, что это изображение
         if not doc.mime_type.startswith("image/"):
             await message.answer("Пожалуйста, отправь изображение или фото.")
             return
@@ -31,30 +28,25 @@ async def handle_image(message: types.Message, state: FSMContext):
         photo_bytes = await message.bot.download_file(file.file_path)
         image_data = photo_bytes.read()
 
-    # ================================
-    # 2) Если отправлено КАК ФОТО
-    # ================================
     else:
         file_id = message.photo[-1].file_id
         file = await message.bot.get_file(file_id)
         photo_bytes = await message.bot.download_file(file.file_path)
         image_data = photo_bytes.read()
 
-    # ================================
-    # 3) Инференс
-    # ================================
-    overlay_jpg, cutout_png = predict_mask(image_data, model_type)
+    detection_result = detect_belly(
+        image_bytes=image_data,
+        model_type=model_type,
+    )
 
-    # Overlay
     await message.answer_photo(
-        BufferedInputFile(overlay_jpg, filename="overlay.jpg"),
-        caption="Вот результат сегментации 🦎",
+        BufferedInputFile(detection_result.overlay, filename="overlay.jpg"),
+        caption="Получившаяся маска",
         reply_markup=start_over_kb()
     )
 
-    # vertical strip (вырезанное брюшко)
     await message.answer_document(
-        BufferedInputFile(cutout_png, filename="belly.png"),
+        BufferedInputFile(detection_result.belly, filename="belly.png"),
         caption="Вырезанное брюшко",
         reply_markup=start_over_kb()
     )

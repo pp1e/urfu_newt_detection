@@ -16,6 +16,8 @@ DEVICE = os.getenv("DEVICE", "cpu")
 ENCODER = os.getenv("ENCODER", "resnet34")
 ENCODER_WEIGHTS = os.getenv("ENCODER_WEIGHTS", "imagenet")
 CLASSES = int(os.getenv("CLASSES", 1))
+IMG_SIZE = int(os.getenv("IMG_SIZE", 768))
+THRESHOLD = float(os.getenv("THRESHOLD", 0.5))
 
 
 def build_model():
@@ -28,10 +30,8 @@ def build_model():
 
 
 def load_model(path: str):
-    checkpoint = torch.load(path, map_location=DEVICE)
+    checkpoint = torch.load(path, map_location=DEVICE, weights_only=False)
 
-    # твоя структура чекпоинта:
-    # {"model_state": ..., "epoch": ..., "val_dice": ..., ...}
     state_dict = checkpoint.get("model_state", checkpoint)
 
     model = build_model()

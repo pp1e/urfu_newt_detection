@@ -10,6 +10,7 @@ async def choose_model(callback: types.CallbackQuery, state: FSMContext):
     await state.update_data(model=model_type)
 
     await callback.message.answer(
-        f"Отлично! Теперь пришли фото для анализа ({'Карелина' if model_type=='karelina' else 'Ребристый'})"
+        f"Отлично! Теперь пришли фото для анализа "
+        f"{'тритона Карелина' if model_type=='karelina' else 'Ребристого тритона'}"
     )
     await callback.answer()
