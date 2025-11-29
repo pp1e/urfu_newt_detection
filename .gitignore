@@ -1,2 +1,8 @@
 .idea/
 *__pycache__*
+
+# Data
+
+data
+masks_manual
+output
