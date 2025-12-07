@@ -4,69 +4,131 @@ from PIL import Image
 
 
 def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Image.Image | None:
-    """Warp the belly along its medial axis so that it fills the entire rectangle."""
+    """
+    Выполняет нелинейное выпрямление брюшка:
+    по каждой горизонтальной строке растягивает область между левым и правым краем маски
+    в фиксированную ширину target_size.
+    """
+
+    # 1. Получаем бинарную маску из RGB-изображения:
+    # считаем пиксель "брюшком", если он не полностью чёрный.
     mask_bool = image_np.sum(axis=2) > 0
     if not mask_bool.any():
         return None
 
-    # Align major axis vertically using PCA on mask coordinates.
+    # 2. Вычисляем главную ось объекта через PCA
+    # Нужно, чтобы повернуть брюшко вертикально.
+
+    # Получаем координаты всех пикселей маски
     ys, xs = np.nonzero(mask_bool)
+
+    # Формируем массив точек (x, y)
     coords = np.column_stack((xs.astype(np.float32), ys.astype(np.float32)))
+
+    # Центрируем точки (для корректной ковариации)
     mean = coords.mean(axis=0)
     centered = coords - mean
+
+    # Ковариационная матрица
     cov = np.cov(centered, rowvar=False)
+
+    # Собственные значения и векторы
     eigvals, eigvecs = np.linalg.eigh(cov)
-    major = eigvecs[:, 1]  # eigenvector with largest eigenvalue
+
+    # Главная ось — собственный вектор с максимальным собственным значением
+    major = eigvecs[:, 1]
+
+    # Угол наклона главной оси
     angle_rad = np.arctan2(major[1], major[0])
     rot_deg = 90.0 - np.degrees(angle_rad)
 
+    # 3. Поворот изображения и маски так, чтобы брюшко стало вертикальным
     h, w = mask_bool.shape
     center = (w / 2.0, h / 2.0)
     rot_mat = cv2.getRotationMatrix2D(center, rot_deg, 1.0)
-    rot_image = cv2.warpAffine(image_np, rot_mat, (w, h), flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
+
+    # Поворачиваем изображение
+    rot_image = cv2.warpAffine(
+        image_np, rot_mat, (w, h),
+        flags=cv2.INTER_LINEAR,
+        borderValue=(0, 0, 0)
+    )
+
+    # Поворачиваем маску
     rot_mask = cv2.warpAffine(
-        (mask_bool.astype(np.uint8) * 255), rot_mat, (w, h), flags=cv2.INTER_NEAREST, borderValue=0
+        (mask_bool.astype(np.uint8) * 255),
+        rot_mat,
+        (w, h),
+        flags=cv2.INTER_NEAREST,
+        borderValue=0
     ) > 0
 
-    # Recompute row spans on rotated mask.
+    # 4. Для каждой строки ищем левую и правую границу маски
+
+    # Минимальный и максимальный X для каждой строки
     x_min = np.full(h, np.inf)
     x_max = np.full(h, -np.inf)
+
     ys_nonzero, xs_nonzero = np.nonzero(rot_mask)
     if len(ys_nonzero) == 0:
         return None
+
     for y, x in zip(ys_nonzero, xs_nonzero):
         if x < x_min[y]:
             x_min[y] = x
         if x > x_max[y]:
             x_max[y] = x
 
+    # Строки, где вообще есть брюшко
     valid_rows = np.where(x_max >= 0)[0]
     if len(valid_rows) == 0:
         return None
 
     y_start, y_end = valid_rows.min(), valid_rows.max()
-    tgt_w, tgt_h = target_size
-    out = np.zeros((tgt_h, tgt_w, 3), dtype=np.uint8)
 
-    src_y_f = np.linspace(y_start, y_end, tgt_h)
+    # 5. Подготавливаем выходное изображение фиксированного размера
+
+    target_width, target_height = target_size
+    out = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+
+    # Строим равномерное соответствие между строками выходного изображения
+    # (целевое количество строк — target_height)
+    # и строками исходного изображения в диапазоне от y_start до y_end]
+    src_y_f = np.linspace(y_start, y_end, target_height)
+
+    # 6. Основной этап растяжения
     for yi, sy in enumerate(src_y_f):
         sy_idx = int(round(sy))
-        # Find nearest valid row if current is empty.
+
+        # Если строка пустая — берем ближайшую непустую
         if x_max[sy_idx] < 0:
             nearest = valid_rows[np.abs(valid_rows - sy_idx).argmin()]
             sy_idx = int(nearest)
+
+        # Берём строку исходного изображения
         row = rot_image[sy_idx]
+
+        # Левая и правая границы брюшка в этой строке
         x0, x1 = int(x_min[sy_idx]), int(x_max[sy_idx])
         x0 = max(0, min(x0, w - 1))
         x1 = max(0, min(x1, w - 1))
+
         if x1 <= x0:
             continue
-        xs_src = np.linspace(x0, x1, tgt_w)
-        # Interpolate per channel.
+
+        # Создаём равномерную сетку по ширине
+        xs_src = np.linspace(x0, x1, target_width)
+
+        # 7. Интерполяция каждого цветового канала
         for c in range(3):
-            out[yi, :, c] = np.interp(xs_src, np.arange(w), row[:, c]).astype(np.uint8)
+            out[yi, :, c] = np.interp(
+                xs_src,
+                np.arange(w),
+                row[:, c]
+            ).astype(np.uint8)
 
     return Image.fromarray(out)
+
 
 def extract_belly_from_prediction(
     original: np.ndarray,
@@ -75,38 +137,35 @@ def extract_belly_from_prediction(
     auto_rotate: bool = True,
     warp: bool = True,
 ) -> Image.Image:
-    """
-    original: np.ndarray HxWx3 (RGB)
-    mask: np.ndarray HxW uint8 (0 or 255)
-    """
-    mask_gray = mask.astype(np.uint8)
 
-    # Бинаризуем
+    # 1. Приведение маски к бинарному виду
+    mask_gray = mask.astype(np.uint8)
     mask_bool = mask_gray > 0
+
     if not mask_bool.any():
         raise ValueError("Mask is empty — no belly detected")
 
-    # Crop bounding box
+    # 2. Поиск bounding-box по маске
     ys, xs = np.nonzero(mask_bool)
     y0, y1 = ys.min(), ys.max() + 1
     x0, x1 = xs.min(), xs.max() + 1
 
-    # zero-out background
+    # 3. Обнуление фона вне маски
     masked = np.zeros_like(original)
     masked[mask_bool] = original[mask_bool]
     crop = masked[y0:y1, x0:x1]
 
     belly_img = Image.fromarray(crop)
 
-    # Auto-rotate: make portrait
+    # 4. Автоповорот (портретная ориентация)
     if auto_rotate and belly_img.width > belly_img.height:
         belly_img = belly_img.rotate(90, expand=True)
 
-    # Try warp
+    # 5. Варпинг по медиальной оси
     if warp:
         warped = warp_belly_to_rect(np.array(belly_img), target_size)
         if warped is not None:
             return warped
 
-    # fallback: plain resize
+    # 6. Fallback
     return belly_img.resize(target_size, Image.BILINEAR)

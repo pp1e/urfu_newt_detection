@@ -15,7 +15,7 @@ def create_overlay(
     mask_rgb = np.zeros_like(orig)
 
     # Красная маска
-    mask_rgb[:, :, 0] = mask  # R канал
+    mask_rgb[:, :, 0] = mask
     mask_rgb[:, :, 1] = 0
     mask_rgb[:, :, 2] = 0
 
