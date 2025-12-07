@@ -1,8 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from io import BytesIO
 
 from PIL import Image
 
+from bot.belly_detection.clean_mask import clean_mask
 from bot.belly_detection.create_overlay import create_overlay
 from bot.belly_detection.extract_belly import extract_belly_from_prediction
 from bot.belly_detection.predict_mask import predict_mask
@@ -30,6 +31,15 @@ def detect_belly(
     mask_with_original = predict_mask(
         image_bytes=image_bytes,
         model_type=model_type,
+    )
+
+    mask_with_original = replace(
+        mask_with_original,
+        mask=clean_mask(
+            mask_with_original.mask,
+            min_area=600,
+            kernel_size=9,
+        )
     )
 
     belly_image = extract_belly_from_prediction(
