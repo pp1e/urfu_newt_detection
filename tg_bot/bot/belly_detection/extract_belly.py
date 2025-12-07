@@ -63,7 +63,20 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
         borderValue=0
     ) > 0
 
-    # 4. Для каждой строки ищем левую и правую границу маски
+    # 4. Проверяем ориентацию по bounding box и
+    # доворачиваем на 90° в случае необходимости
+
+    ys_r, xs_r = np.nonzero(rot_mask)
+    h_span = ys_r.max() - ys_r.min()
+    w_span = xs_r.max() - xs_r.min()
+
+    # Если после PCA брюшко оказалось "горизонтальным" — довернём ещё на 90°
+    if w_span > h_span:
+        rot_image = cv2.rotate(rot_image, cv2.ROTATE_90_CLOCKWISE)
+        rot_mask = cv2.rotate(rot_mask.astype(np.uint8) * 255,
+                              cv2.ROTATE_90_CLOCKWISE) > 0
+
+    # 5. Для каждой строки ищем левую и правую границу маски
 
     # Минимальный и максимальный X для каждой строки
     x_min = np.full(h, np.inf)
@@ -86,7 +99,7 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
 
     y_start, y_end = valid_rows.min(), valid_rows.max()
 
-    # 5. Подготавливаем выходное изображение фиксированного размера
+    # 6. Подготавливаем выходное изображение фиксированного размера
 
     target_width, target_height = target_size
     out = np.zeros((target_height, target_width, 3), dtype=np.uint8)
@@ -96,7 +109,7 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
     # и строками исходного изображения в диапазоне от y_start до y_end]
     src_y_f = np.linspace(y_start, y_end, target_height)
 
-    # 6. Основной этап растяжения
+    # 7. Основной этап растяжения
     for yi, sy in enumerate(src_y_f):
         sy_idx = int(round(sy))
 
@@ -119,11 +132,13 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
         # Создаём равномерную сетку по ширине
         xs_src = np.linspace(x0, x1, target_width)
 
-        # 7. Интерполяция каждого цветового канала
+        # 8. Интерполяция каждого цветового канала
+        row_w = row.shape[0]  # ширина строки после всех поворотов
+
         for c in range(3):
             out[yi, :, c] = np.interp(
                 xs_src,
-                np.arange(w),
+                np.arange(row_w),
                 row[:, c]
             ).astype(np.uint8)
 
