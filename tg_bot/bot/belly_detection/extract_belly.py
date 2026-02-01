@@ -63,24 +63,29 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
         borderValue=0
     ) > 0
 
-    # 4. Проверяем ориентацию по bounding box и
+    # 4. Проверяем ориентацию и
     # доворачиваем на 90° в случае необходимости
 
     ys_r, xs_r = np.nonzero(rot_mask)
-    h_span = ys_r.max() - ys_r.min()
-    w_span = xs_r.max() - xs_r.min()
+    if len(ys_r) == 0:
+        return None
 
-    # Если после PCA брюшко оказалось "горизонтальным" — довернём ещё на 90°
-    if w_span > h_span:
+    std_x = float(np.std(xs_r))
+    std_y = float(np.std(ys_r))
+
+    need_extra_90 = std_x > std_y
+    if need_extra_90:
         rot_image = cv2.rotate(rot_image, cv2.ROTATE_90_CLOCKWISE)
         rot_mask = cv2.rotate(rot_mask.astype(np.uint8) * 255,
                               cv2.ROTATE_90_CLOCKWISE) > 0
 
+    h_rot, w_rot = rot_mask.shape
+
     # 5. Для каждой строки ищем левую и правую границу маски
 
     # Минимальный и максимальный X для каждой строки
-    x_min = np.full(h, np.inf)
-    x_max = np.full(h, -np.inf)
+    x_min = np.full(h_rot, np.inf)
+    x_max = np.full(h_rot, -np.inf)
 
     ys_nonzero, xs_nonzero = np.nonzero(rot_mask)
     if len(ys_nonzero) == 0:
@@ -112,6 +117,7 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
     # 7. Основной этап растяжения
     for yi, sy in enumerate(src_y_f):
         sy_idx = int(round(sy))
+        sy_idx = max(0, min(sy_idx, h_rot - 1))
 
         # Если строка пустая — берем ближайшую непустую
         if x_max[sy_idx] < 0:
@@ -121,10 +127,14 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
         # Берём строку исходного изображения
         row = rot_image[sy_idx]
 
+        row_w = row.shape[0] # ширина строки после всех поворотов
+
         # Левая и правая границы брюшка в этой строке
-        x0, x1 = int(x_min[sy_idx]), int(x_max[sy_idx])
-        x0 = max(0, min(x0, w - 1))
-        x1 = max(0, min(x1, w - 1))
+        x0 = int(x_min[sy_idx])
+        x1 = int(x_max[sy_idx])
+
+        x0 = max(0, min(x0, row_w - 1))
+        x1 = max(0, min(x1, row_w - 1))
 
         if x1 <= x0:
             continue
@@ -133,7 +143,6 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
         xs_src = np.linspace(x0, x1, target_width)
 
         # 8. Интерполяция каждого цветового канала
-        row_w = row.shape[0]  # ширина строки после всех поворотов
 
         for c in range(3):
             out[yi, :, c] = np.interp(
