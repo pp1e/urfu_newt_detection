@@ -25,6 +25,12 @@ albumentations = "^2.0.8"
 python-dotenv = "^1.2.1"
 timm = "0.9.12"
 
+# Database
+asyncpg = "~0.31.0"
+alembic = "~1.18.1"
+pgvector = "~0.4.2"
+sqlalchemy = "~2.0.45"
+
 
 [build-system]
 requires = ["poetry-core"]

@@ -3,7 +3,12 @@ from aiogram.fsm.context import FSMContext
 
 from bot.belly_detection.detect_belly import detect_belly
 from aiogram.types import BufferedInputFile
+
+from bot.belly_vectorization.embed_image_bytes import embed_image_bytes
+from bot.database.search_newt_by_belly import find_best_match
 from bot.keyboards.start_over_kb import start_over_kb
+from settings.database_config import SYNC_DATABASE_URL
+from settings.embedder_loader import EMBEDDER_MODEL
 
 router = Router()
 
@@ -39,6 +44,21 @@ async def handle_image(message: types.Message, state: FSMContext):
         model_type=model_type,
     )
 
+    belly_emb = embed_image_bytes(EMBEDDER_MODEL, detection_result.belly)
+
+    matches = await find_best_match(
+        SYNC_DATABASE_URL, belly_emb, top_k=5,
+    )
+
+    if not matches:
+        verdict = "База пустая — не с чем сравнивать."
+    else:
+        best = matches[0]
+        if best.similarity >= 0.75:
+            verdict = f"Похоже на тритона **{best.newt_class_name}** (сходство {best.similarity:.3f})."
+        else:
+            verdict = f"Похоже, это **новый тритон** (лучшее сходство {best.similarity:.3f})."
+
     await message.answer_photo(
         BufferedInputFile(detection_result.overlay, filename="overlay.jpg"),
         caption="Получившаяся маска",
@@ -50,3 +70,5 @@ async def handle_image(message: types.Message, state: FSMContext):
         caption="Вырезанное брюшко",
         reply_markup=start_over_kb()
     )
+
+    await message.answer(verdict, parse_mode="Markdown")

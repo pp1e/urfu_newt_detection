@@ -35,7 +35,7 @@ import segmentation_models_pytorch as smp
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run inference with the manual belly U-Net")
-    parser.add_argument("--images-dir", type=Path, default=Path("data/karelin_newt_labeled-fixed"),
+    parser.add_argument("--images-dir", type=Path, default=Path("data/karelin_newt_annotated-fixed"),
                         help="Root directory with source images (will be scanned recursively)")
     parser.add_argument("--checkpoint", type=Path, default=Path("output/belly_unet_manual.pt"),
                         help="Path to the trained checkpoint (.pt) saved by the training script")
