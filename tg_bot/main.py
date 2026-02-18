@@ -1,13 +1,20 @@
 import asyncio
 from bot.bot import bot, dp
-from bot.handlers.start import router as start_router
-from bot.handlers.choose_model import router as choose_router
-from bot.handlers.process_photo import router as photo_router
+from bot.handlers.choose_model import choose_model_router
+from bot.handlers.confirm_belly_handler import confirm_belly_router
+from bot.handlers.process_photo import process_photo_router
+from bot.handlers.save_existing_newt_belly import save_existing_newt_belly_router
+from bot.handlers.save_new_newt_belly import save_new_newt_belly_router
+from bot.handlers.start import start_router
+
 
 async def main():
     dp.include_router(start_router)
-    dp.include_router(choose_router)
-    dp.include_router(photo_router)
+    dp.include_router(choose_model_router)
+    dp.include_router(process_photo_router)
+    dp.include_router(confirm_belly_router)
+    dp.include_router(save_existing_newt_belly_router)
+    dp.include_router(save_new_newt_belly_router)
 
     await dp.start_polling(bot)
 
