@@ -1,9 +1,58 @@
+from typing import Sequence
+
 import numpy as np
 import cv2
 from PIL import Image
 
 
-def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Image.Image | None:
+def warp_affine_expand(
+    img,
+    M,
+    border_value: Sequence[float] | float=0,
+    flags=cv2.INTER_NEAREST,
+):
+    h, w = img.shape[:2]
+
+    # 4 угла изображения
+    corners = np.array([
+        [0, 0],
+        [w, 0],
+        [w, h],
+        [0, h]
+    ], dtype=np.float32)
+
+    ones = np.ones((4, 1), dtype=np.float32)
+    corners_h = np.hstack([corners, ones])
+
+    # преобразованные углы
+    tc = (M @ corners_h.T).T
+
+    min_xy = tc.min(axis=0)
+    max_xy = tc.max(axis=0)
+
+    out_w = int(np.ceil(max_xy[0] - min_xy[0]))
+    out_h = int(np.ceil(max_xy[1] - min_xy[1]))
+
+    # сдвигаем матрицу, чтобы всё было внутри
+    M2 = M.copy()
+    M2[0, 2] -= min_xy[0]
+    M2[1, 2] -= min_xy[1]
+
+    rotated = cv2.warpAffine(
+        img,
+        M2,
+        (out_w, out_h),
+        flags=flags,
+        borderValue=border_value
+    )
+
+    return rotated
+
+
+def warp_belly_to_rect(
+    image_np: np.ndarray,
+    target_size: tuple[int, int],
+) -> Image.Image | None:
     """
     Выполняет нелинейное выпрямление брюшка:
     по каждой горизонтальной строке растягивает область между левым и правым краем маски
@@ -40,27 +89,29 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
 
     # Угол наклона главной оси
     angle_rad = np.arctan2(major[1], major[0])
-    rot_deg = 90.0 - np.degrees(angle_rad)
+    rot_deg = np.degrees(angle_rad) - 90
 
     # 3. Поворот изображения и маски так, чтобы брюшко стало вертикальным
     h, w = mask_bool.shape
-    center = (w / 2.0, h / 2.0)
+    cy = float(ys.mean())
+    cx = float(xs.mean())
+    center = (cx, cy)
     rot_mat = cv2.getRotationMatrix2D(center, rot_deg, 1.0)
 
     # Поворачиваем изображение
-    rot_image = cv2.warpAffine(
-        image_np, rot_mat, (w, h),
+    rot_image = warp_affine_expand(
+        image_np,
+        M=rot_mat,
         flags=cv2.INTER_LINEAR,
-        borderValue=(0, 0, 0)
+        border_value=(0, 0, 0),
     )
 
     # Поворачиваем маску
-    rot_mask = cv2.warpAffine(
+    rot_mask = warp_affine_expand(
         (mask_bool.astype(np.uint8) * 255),
-        rot_mat,
-        (w, h),
+        M=rot_mat,
         flags=cv2.INTER_NEAREST,
-        borderValue=0
+        border_value=0,
     ) > 0
 
     # 4. Проверяем ориентацию и
@@ -69,15 +120,6 @@ def warp_belly_to_rect(image_np: np.ndarray, target_size: tuple[int, int]) -> Im
     ys_r, xs_r = np.nonzero(rot_mask)
     if len(ys_r) == 0:
         return None
-
-    std_x = float(np.std(xs_r))
-    std_y = float(np.std(ys_r))
-
-    need_extra_90 = std_x > std_y
-    if need_extra_90:
-        rot_image = cv2.rotate(rot_image, cv2.ROTATE_90_CLOCKWISE)
-        rot_mask = cv2.rotate(rot_mask.astype(np.uint8) * 255,
-                              cv2.ROTATE_90_CLOCKWISE) > 0
 
     h_rot, w_rot = rot_mask.shape
 
@@ -181,15 +223,11 @@ def extract_belly_from_prediction(
 
     belly_img = Image.fromarray(crop)
 
-    # 4. Автоповорот (портретная ориентация)
-    if auto_rotate and belly_img.width > belly_img.height:
-        belly_img = belly_img.rotate(90, expand=True)
-
-    # 5. Варпинг по медиальной оси
+    # 4. Варпинг по медиальной оси
     if warp:
         warped = warp_belly_to_rect(np.array(belly_img), target_size)
         if warped is not None:
             return warped
 
-    # 6. Fallback
+    # 5. Fallback
     return belly_img.resize(target_size, Image.BILINEAR)
