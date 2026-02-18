@@ -144,7 +144,22 @@ def warp_belly_to_rect(
     if len(valid_rows) == 0:
         return None
 
-    y_start, y_end = valid_rows.min(), valid_rows.max()
+    # Вычисляем целевые координаты по y
+    # чтобы обрезать верхние и нижние концы маски,
+    # где она слишком узкая
+    widths = (x_max[valid_rows] - x_min[valid_rows] + 1).astype(np.float32)
+
+    # устойчивый "типичный" поперечник
+    w_ref = float(np.median(widths))
+
+    keep = widths >= (0.75 * w_ref) # Порог обрезания 0.75
+
+    kept_rows = valid_rows[keep]
+    if kept_rows.size < 10:
+        return None  # слишком мало нормальных строк
+
+    y_start = int(kept_rows.min())
+    y_end = int(kept_rows.max())
 
     # 6. Подготавливаем выходное изображение фиксированного размера
 
