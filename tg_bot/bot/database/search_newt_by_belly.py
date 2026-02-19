@@ -8,28 +8,30 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.utils import to_vector_literal
-
-
-@dataclass(frozen=True)
-class Match:
-    newt_class_name: str
-    similarity: float
+from bot.domain.newt_match import NewtMatch
 
 
 async def find_best_match(
     session: AsyncSession,
     query_emb: np.ndarray,
     top_k: int = 5,
-) -> List[Match]:
+) -> List[NewtMatch]:
 
     vector_literal = to_vector_literal(query_emb)
 
     sql = text("""
+        WITH best_per_class AS (
+            SELECT DISTINCT ON (newt_class_name)
+                newt_class_name,
+                (embedding <=> CAST(:embedding AS vector)) AS distance
+            FROM belly_embedding
+            ORDER BY newt_class_name, distance
+        )
         SELECT
             newt_class_name,
-            1.0 - (embedding <=> CAST(:embedding AS vector)) AS similarity
-        FROM belly_embedding
-        ORDER BY embedding <=> CAST(:embedding AS vector)
+            1.0 - distance AS similarity
+        FROM best_per_class
+        ORDER BY distance
         LIMIT :top_k;
     """)
 
@@ -44,8 +46,8 @@ async def find_best_match(
     rows = result.mappings().all()
 
     return [
-        Match(
-            newt_class_name=row["newt_class_name"],
+        NewtMatch(
+            class_name=row["newt_class_name"],
             similarity=float(row["similarity"]),
         )
         for row in rows

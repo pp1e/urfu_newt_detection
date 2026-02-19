@@ -20,5 +20,5 @@ async def save_embedding_from_state(
         image_bytes=belly_bytes,
         embedding=embedding,
         newt_class_name=newt_id,
-        run_name="current_model",
+        run_name="tg_bot",
     )

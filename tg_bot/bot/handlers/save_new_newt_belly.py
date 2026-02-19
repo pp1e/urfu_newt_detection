@@ -10,6 +10,9 @@ save_new_newt_belly_router = Router()
 @save_new_newt_belly_router.message(AddNewtBellyFlow.waiting_for_new_newt_id)
 async def save_new_newt_belly_handler(message: types.Message, state: FSMContext):
     newt_id = message.text.strip()
+    if not newt_id:
+        await message.answer("ID не должен быть пустым.\nВведите ID нового тритона:")
+        return
 
     async with AsyncSessionFactory() as session:
         await save_embedding_from_state(
