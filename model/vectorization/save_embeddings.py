@@ -22,8 +22,8 @@ sys.path.append(
     )
 )
 
-from model.vectorization.common import build_transforms
-from model.vectorization.common import ResNetClassifierEmbedder
+from tg_bot.bot.belly_vectorization.build_transform import build_transforms
+from tg_bot.bot.belly_vectorization.classifier_embedder import ResNetClassifierEmbedder
 from tg_bot.settings.database_config import SYNC_DATABASE_URL
 
 
@@ -42,7 +42,7 @@ class BellyFolderDataset(Dataset):
         ...
     Non-numeric folders are skipped by default.
     """
-    def __init__(self, root: Path, transform: nn.Module, allow_non_numeric: bool = False):
+    def __init__(self, root: Path, transform: nn.Module, allow_non_numeric: bool = True):
         self.root = root
         self.transform = transform
 

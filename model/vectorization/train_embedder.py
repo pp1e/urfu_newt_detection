@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import random
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -13,8 +14,14 @@ from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 from tqdm import tqdm
 
-from model.train_manual_belly_unet import build_transforms
-from model.vectorization.common import ResNetClassifierEmbedder
+sys.path.append(
+    str(
+        Path(__file__).resolve().parent.parent.parent
+    )
+)
+
+from tg_bot.bot.belly_vectorization.classifier_embedder import ResNetClassifierEmbedder
+from tg_bot.bot.belly_vectorization.build_transform import build_transforms
 
 
 # -----------------------------
@@ -47,7 +54,7 @@ class BellyIdDataset(Dataset):
         *,
         min_images_per_class: int = 1,
         class_to_id: Dict[str, int] | None = None,
-        allow_non_numeric: bool = False,
+        allow_non_numeric: bool = True,
     ):
         self.root = root
         self.transform = transform
@@ -125,7 +132,7 @@ class TrainConfig:
     image_size: int = 224
     embedding_dim: int = 256
     batch_size: int = 64
-    epochs: int = 20
+    epochs: int = 40
     lr: float = 3e-4
     weight_decay: float = 1e-4
     num_workers: int = 4
@@ -288,13 +295,13 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--run-name", type=str, required=True, help="Название прогона/инференса (для имени файла)")
 
     p.add_argument("--device", type=str, default=("cuda" if torch.cuda.is_available() else "cpu"),
-                   help="cuda / cpu / cuda:0 ... (если CUDA падает — ставь cpu)")
+                   help="cuda / cpu")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    out_path = Path("output") / f"belly_embedder_{args.run_name}.pt"
+    out_path = Path("output") / f"{args.run_name}.pt"
 
     cfg = TrainConfig(
         data_root=args.data_root,

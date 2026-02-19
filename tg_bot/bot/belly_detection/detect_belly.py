@@ -22,7 +22,6 @@ def pil_to_bytes(image: Image.Image, image_format: str = "PNG") -> bytes:
 
 def detect_belly(
     image_bytes: bytes,
-    model_type: str,
     target_size=(80, 320),
     auto_rotate=True,
     warp=True,
@@ -30,7 +29,6 @@ def detect_belly(
 ) -> BellyDetectionResult:
     mask_with_original = predict_mask(
         image_bytes=image_bytes,
-        model_type=model_type,
     )
 
     mask_with_original = replace(

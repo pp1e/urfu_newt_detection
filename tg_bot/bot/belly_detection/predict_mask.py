@@ -7,7 +7,7 @@ import torch
 from PIL import Image
 from numpy import ndarray
 
-from settings.loader import MODEL_KARELINA, MODEL_RIBBED, IMG_SIZE, THRESHOLD, DEVICE
+from settings.loader import IMG_SIZE, THRESHOLD, DEVICE, SEGMENTATION_MODEL
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
@@ -53,12 +53,8 @@ def postprocess_prediction(
     return binary
 
 
-def predict_mask(image_bytes: bytes, model_type: str) -> MaskWithOriginal:
-    if model_type == "karelina":
-        model = MODEL_KARELINA
-    else:
-        model = MODEL_RIBBED
-
+def predict_mask(image_bytes: bytes) -> MaskWithOriginal:
+    model = SEGMENTATION_MODEL
 
     transform = build_transform(IMG_SIZE)
 

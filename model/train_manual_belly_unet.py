@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
                         help="Root directory with original images")
     parser.add_argument("--masks-dir", type=Path, default=Path("masks_manual"),
                         help="Directory with manually labeled masks")
-    parser.add_argument("--output", type=Path, default=Path("output/manual_unet.pt"),
+    parser.add_argument("--output", type=Path, default=Path("output/segmentation_all_kinds.pt"),
                         help="Path to save the best checkpoint")
     parser.add_argument("--img-size", type=int, default=768, help="Image resize to feed the network")
     parser.add_argument("--batch-size", type=int, default=4)

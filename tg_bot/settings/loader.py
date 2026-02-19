@@ -7,8 +7,7 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-MODEL_KARELINA_PATH = os.getenv("MODEL_KARELINA_PATH")
-MODEL_RIBBED_PATH = os.getenv("MODEL_RIBBED_PATH")
+SEGMENTATION_MODEL_PATH = os.getenv("SEGMENTATION_MODEL_PATH")
 
 DEVICE = os.getenv("DEVICE", "cpu")
 
@@ -42,5 +41,4 @@ def load_model(path: str):
     return model
 
 
-MODEL_KARELINA = load_model(MODEL_KARELINA_PATH)
-MODEL_RIBBED = load_model(MODEL_RIBBED_PATH)
+SEGMENTATION_MODEL = load_model(SEGMENTATION_MODEL_PATH)

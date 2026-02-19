@@ -6,6 +6,7 @@ from aiogram.types import BufferedInputFile
 
 from bot.belly_vectorization.embed_image_bytes import embed_image_bytes
 from bot.database.search_newt_by_belly import find_best_match
+from bot.handlers.utils import escape_md
 from bot.keyboards.сonfirm_keyboard import confirm_kb
 from bot.state import AddNewtBellyFlow
 from db.engine import AsyncSessionFactory
@@ -16,13 +17,6 @@ process_photo_router = Router()
 
 @process_photo_router.message(lambda m: m.photo or m.document)
 async def process_photo_handler(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    model_type = data.get("model")
-
-    if not model_type:
-        await message.answer("Сначала выбери модель через /start")
-        return
-
     if message.document:
         doc = message.document
 
@@ -42,7 +36,6 @@ async def process_photo_handler(message: types.Message, state: FSMContext):
 
     detection_result = detect_belly(
         image_bytes=image_data,
-        model_type=model_type,
     )
 
     belly_emb = embed_image_bytes(EMBEDDER_MODEL, detection_result.belly)
@@ -57,12 +50,13 @@ async def process_photo_handler(message: types.Message, state: FSMContext):
             return
 
         best = matches[0]
+        best_newt_class_name_markdown = escape_md(best.newt_class_name)
         if best.similarity >= 0.75:
-            verdict = f"Похоже на тритона **{best.newt_class_name}** (сходство {best.similarity:.3f})."
+            verdict = f"Похоже на тритона **{best_newt_class_name_markdown}** (сходство {best.similarity:.3f})."
             predicted_newt_id = best.newt_class_name
         else:
             verdict = (f"Похоже, это **новый тритон** (лучшее сходство {best.similarity:.3f}"
-                       f" с тритоном **{best.newt_class_name}**).")
+                       f" с тритоном **{best_newt_class_name_markdown}**).")
             predicted_newt_id = None
 
         await state.update_data(

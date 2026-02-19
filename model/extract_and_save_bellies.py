@@ -36,19 +36,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--mask-dir",
         type=Path,
-        default=Path("output/test_belly_masks_karelin_run3"),
         help="Directory with predicted belly masks (_belly_mask.png).",
     )
     parser.add_argument(
         "--images-dir",
         type=Path,
-        default=Path("data/source/karelin_newt_data-fixed"),
         help="Directory with source photos (mirrors mask directory structure).",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("output/belly_rects_karelin_run3"),
         help="Where to store stretched belly crops.",
     )
     parser.add_argument("--width", type=int, default=80, help="Target width of the stretched belly.")
