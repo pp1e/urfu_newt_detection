@@ -1,7 +1,7 @@
 from aiogram import Router, types
 from aiogram.fsm.context import FSMContext
 
-from bot.belly_detection.detect_belly import detect_belly
+from bot.belly_detection.detect_belly_pipeline import detect_belly
 from aiogram.types import BufferedInputFile
 
 from bot.belly_vectorization.embed_image_bytes import embed_image_bytes
@@ -55,7 +55,10 @@ async def process_photo_handler(message: types.Message, state: FSMContext):
     belly_embedding = embed_image_bytes(EMBEDDER_MODEL, detection_result.belly)
     async with AsyncSessionFactory() as session:
         newt_matches = await find_best_match(
-            session, belly_embedding, top_k=5,
+            session=session,
+            query_emb_orig=belly_embedding.original,
+            query_emb_rotated=belly_embedding.rotated,
+            top_k=5,
         )
 
     if not newt_matches:
@@ -65,7 +68,7 @@ async def process_photo_handler(message: types.Message, state: FSMContext):
 
     await state.update_data(
         belly_bytes=detection_result.belly,
-        embedding=belly_embedding.tolist(),
+        embedding=belly_embedding.original.tolist(),
         candidate_ids=[match.class_name for match in newt_matches],
     )
     await state.set_state(AddNewtBellyFlow.waiting_for_newt_class_choice)

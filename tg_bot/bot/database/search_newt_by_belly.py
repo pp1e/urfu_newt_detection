@@ -13,18 +13,33 @@ from bot.domain.newt_match import NewtMatch
 
 async def find_best_match(
     session: AsyncSession,
-    query_emb: np.ndarray,
+    query_emb_orig: np.ndarray,
+    query_emb_rotated: np.ndarray,
     top_k: int = 5,
 ) -> List[NewtMatch]:
 
-    vector_literal = to_vector_literal(query_emb)
+    embedding_orig = to_vector_literal(query_emb_orig)
+    embedding_rotated = to_vector_literal(query_emb_rotated)
 
     sql = text("""
-        WITH best_per_class AS (
+            WITH candidates AS (
+            SELECT
+                newt_class_name,
+                (embedding <=> CAST(:embedding_orig AS vector)) AS distance
+            FROM belly_embedding
+
+            UNION ALL
+
+            SELECT
+                newt_class_name,
+                (embedding <=> CAST(:embedding_rot AS vector)) AS distance
+            FROM belly_embedding
+        ),
+        best_per_class AS (
             SELECT DISTINCT ON (newt_class_name)
                 newt_class_name,
-                (embedding <=> CAST(:embedding AS vector)) AS distance
-            FROM belly_embedding
+                distance
+            FROM candidates
             ORDER BY newt_class_name, distance
         )
         SELECT
@@ -38,7 +53,8 @@ async def find_best_match(
     result = await session.execute(
         sql,
         {
-            "embedding": vector_literal,
+            "embedding_orig": embedding_orig,
+            "embedding_rot": embedding_rotated,
             "top_k": top_k,
         },
     )

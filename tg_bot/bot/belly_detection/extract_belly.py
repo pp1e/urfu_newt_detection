@@ -116,10 +116,38 @@ def warp_belly_to_rect(
 
     # 4. Проверяем ориентацию и
     # доворачиваем на 90° в случае необходимости
+    dbg_mask = (mask_bool.astype(np.uint8) * 255)
+    cv2.imwrite("debug_rot_mask_before_rot.png", dbg_mask)
+    print("Saved debug_rot_mask_before_rot.png")
+
+    dbg_mask = (rot_mask.astype(np.uint8) * 255)
+    cv2.imwrite("debug_rot_mask_before_90.png", dbg_mask)
+    print("Saved debug_rot_mask_before_90.png")
+
+    print(f"degrees {rot_deg}")
+
+    dbg_image = (rot_image.astype(np.uint8) * 255)
+    cv2.imwrite("debug_image_before_90.png", dbg_image)
+    print("Saved debug_image_before_90.png")
 
     ys_r, xs_r = np.nonzero(rot_mask)
     if len(ys_r) == 0:
         return None
+
+    # std_x = float(np.std(xs_r))
+    # std_y = float(np.std(ys_r))
+    #
+    # need_extra_90 = std_x > std_y
+    # print(f"eed_extra_90: {need_extra_90}")
+    # # if need_extra_90:
+    # #     print(f"Доворачивание на 90: {need_extra_90}")
+    # #     rot_image = cv2.rotate(rot_image, cv2.ROTATE_90_CLOCKWISE)
+    # #     rot_mask = cv2.rotate(rot_mask.astype(np.uint8) * 255,
+    # #                           cv2.ROTATE_90_CLOCKWISE) > 0
+    #
+    dbg_mask = (rot_mask.astype(np.uint8) * 255)
+    cv2.imwrite("debug_rot_mask_after_rot.png", dbg_mask)
+    print("Saved debug_rot_mask_after_rot.png")
 
     h_rot, w_rot = rot_mask.shape
 
