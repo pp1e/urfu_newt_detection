@@ -5,8 +5,8 @@ import cv2
 from tqdm import tqdm
 
 # === НАСТРОЙКИ ===
-DATA_ROOT = Path("data")
-OUTPUT_ROOT = Path("masks_manual")
+DATA_ROOT = Path("model/data/source")
+OUTPUT_ROOT = Path("model/masks_manual")
 OUTPUT_ROOT.mkdir(exist_ok=True)
 
 # Прозрачность при наложении маски

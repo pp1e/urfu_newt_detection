@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 from torch import nn
 
 from bot.belly_vectorization.build_transform import build_transforms
-from bot.belly_vectorization.classifier_embedder import ResNetClassifierEmbedder
+from bot.belly_vectorization.classifier_embedder import DinoViTClassifierEmbedder
+from bot.belly_vectorization.constants import IMAGE_SIZE
 
 load_dotenv()
 
@@ -17,7 +18,7 @@ MODEL_EMBEDDER_PATH = os.getenv("MODEL_EMBEDDER_PATH")
 
 @dataclass(frozen=True)
 class Embedder:
-    model: ResNetClassifierEmbedder
+    model: DinoViTClassifierEmbedder
     transform: nn.Module
     device: torch.device
     embedding_dim: int
@@ -26,12 +27,11 @@ class Embedder:
 def build_embedder_model(
     num_classes: int,
     embedding_dim: int = 256,
-    pretrained: bool = True,
 ):
-    return ResNetClassifierEmbedder(
+    return DinoViTClassifierEmbedder(
         num_classes=num_classes,
         embedding_dim=embedding_dim,
-        pretrained=pretrained,
+        pretrained=False,
     )
 
 
@@ -43,15 +43,14 @@ def load_embedder(checkpoint_path: Path, device: str = "cpu") -> Embedder:
         raise RuntimeError("Checkpoint must contain class_to_id (use training checkpoint).")
 
     embedding_dim = int(ckpt.get("embedding_dim", 256))
-    image_size = int(ckpt.get("image_size", 224))
+    image_size = int(ckpt.get("image_size", IMAGE_SIZE))
     num_classes = len(class_to_id)
 
     torch_device = torch.device(device)
 
-    model = ResNetClassifierEmbedder(
+    model = build_embedder_model(
         num_classes=num_classes,
         embedding_dim=embedding_dim,
-        pretrained=False,
     )
     model.load_state_dict(ckpt["model_state"])
     model.to(torch_device)

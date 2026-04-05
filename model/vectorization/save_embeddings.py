@@ -22,8 +22,9 @@ sys.path.append(
     )
 )
 
+from tg_bot.bot.belly_vectorization.constants import IMAGE_SIZE
 from tg_bot.bot.belly_vectorization.build_transform import build_transforms
-from tg_bot.bot.belly_vectorization.classifier_embedder import ResNetClassifierEmbedder
+from tg_bot.bot.belly_vectorization.classifier_embedder import DinoViTClassifierEmbedder
 from tg_bot.settings.database_config import SYNC_DATABASE_URL
 
 
@@ -81,8 +82,8 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser("Embed belly images and insert into Postgres")
     p.add_argument("--data-root", type=Path, required=True, help="Root folder with class subfolders")
     p.add_argument("--checkpoint", type=Path, required=True, help="Trained embedder .pt")
-    p.add_argument("--run-name", type=str, required=True, help="Run/model name")
-    p.add_argument("--image-size", type=int, default=224)
+    p.add_argument("--run-name", type=str, help="Run/model name", default="init")
+    p.add_argument("--image-size", type=int, default=IMAGE_SIZE)
     p.add_argument("--embedding-dim", type=int, default=256)
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     return p.parse_args()
@@ -118,7 +119,7 @@ def main() -> None:
         raise RuntimeError("Checkpoint doesn't contain 'class_to_id'. Use the training checkpoint you saved.")
 
     embedding_dim = int(ckpt.get("embedding_dim", 256))
-    image_size = int(ckpt.get("image_size", 224))
+    image_size = int(ckpt.get("image_size", IMAGE_SIZE))
     num_classes = len(class_to_id)
 
     _, val_tf = build_transforms(image_size)
@@ -138,7 +139,7 @@ def main() -> None:
 
     device = torch.device(args.device)
 
-    classifier = ResNetClassifierEmbedder(
+    classifier = DinoViTClassifierEmbedder(
         num_classes=num_classes,
         embedding_dim=embedding_dim,
         pretrained=False,
