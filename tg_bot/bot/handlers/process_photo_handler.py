@@ -56,8 +56,7 @@ async def process_photo_handler(message: types.Message, state: FSMContext):
     async with AsyncSessionFactory() as session:
         newt_matches = await find_best_match(
             session=session,
-            query_emb_orig=belly_embedding.original,
-            query_emb_rotated=belly_embedding.rotated,
+            query_emb=belly_embedding,
             top_k=5,
         )
 
@@ -68,7 +67,7 @@ async def process_photo_handler(message: types.Message, state: FSMContext):
 
     await state.update_data(
         belly_bytes=detection_result.belly,
-        embedding=belly_embedding.original.tolist(),
+        embedding=belly_embedding.tolist(),
         candidate_ids=[match.class_name for match in newt_matches],
     )
     await state.set_state(AddNewtBellyFlow.waiting_for_newt_class_choice)
