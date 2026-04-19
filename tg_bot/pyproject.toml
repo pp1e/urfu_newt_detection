@@ -14,11 +14,9 @@ priority = "explicit"
 python = "3.12.*"
 opencv-python-headless = "^4.12.0.88"
 numpy = "^2.2.6"
-torch = { version = "2.5.1", source = "torch-cpu" }
-torchvision = { version = "0.20.1", source = "torch-cpu" }
-#torch = { version = "^2.9.0", source = "torch-cpu" }
-#torchvision = "^0.24.0"
-#torchvision = { version = "^0.24.0", source = "torch-cpu" }  # Добавьте source = "torch-cpu"
+torch = { version = "2.11", source = "torch-cpu" }
+torchvision = { version = "0.26.0", source = "torch-cpu" }
+transformers = "~5.5.4"
 aiogram = "^3.22.0"
 aiohttp_socks = "^0.11.0"
 segmentation_models_pytorch = "^0.5.0"
