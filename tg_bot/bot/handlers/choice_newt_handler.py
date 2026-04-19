@@ -21,6 +21,11 @@ async def choice_newt_handler(
         await callback.message.answer("Введите ID нового тритона:")
         await callback.answer()
         return
+    if newt_class_choice == "manual":
+        await state.set_state(AddNewtBellyFlow.waiting_for_existent_newt_id)
+        await callback.message.answer("Введите ID существующего тритона:")
+        await callback.answer()
+        return
 
     async with AsyncSessionFactory() as session:
         await save_embedding_from_state(
