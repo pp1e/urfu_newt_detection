@@ -61,8 +61,8 @@ def predict_mask(image_bytes: bytes) -> MaskWithOriginal:
     batch_tensor, original = prepare_image(image_bytes, transform)
     batch_tensor = batch_tensor.to(DEVICE)
     with torch.no_grad():
-        logits = model(batch_tensor)
-        probs = torch.sigmoid(logits).cpu().numpy()
+        outputs = model(pixel_values=batch_tensor)
+        probs = torch.sigmoid(outputs.logits).cpu().numpy()
 
     prob = probs[0]
 

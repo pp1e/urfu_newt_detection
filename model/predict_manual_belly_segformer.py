@@ -1,6 +1,6 @@
-"""Generate belly segmentation masks with the manually trained U-Net.
+"""Generate belly segmentation masks with SegFormer-B2.
 
-The script loads a checkpoint produced by ``train_manual_belly_unet.py`` and
+The script loads a checkpoint produced by VKR training and
 runs it over every image inside ``images-dir`` (recursively). For each source
 photo both a binary mask (0/255) and an overlay (RGB photo with the mask
 painted on top) are written to the output directory, preserving the
@@ -8,9 +8,9 @@ sub-directory layout. Optionally an extra overlay directory can be specified
 to keep visualizations separately.
 
 Example:
-    python predict_manual_belly_unet.py \
+    python predict_manual_belly_segformer.py \
         --images-dir data/karelin_newt_labeled-fixed \
-        --checkpoint output/belly_unet_manual.pt \
+        --checkpoint weights/segformer_nvidia_mit-b2_best.pt \
         --output-dir output/belly_masks \
         --overlay-dir output/belly_overlays
 """
@@ -25,44 +25,88 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 from tqdm import tqdm
 
 import torch
-
-import segmentation_models_pytorch as smp
+import torch.nn.functional as F
+from transformers import SegformerForSemanticSegmentation
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run inference with the manual belly U-Net")
-    parser.add_argument("--images-dir", type=Path, default=Path("data/karelin_newt_annotated-fixed"),
-                        help="Root directory with source images (will be scanned recursively)")
-    parser.add_argument("--checkpoint", type=Path, default=Path("output/belly_unet_manual.pt"),
-                        help="Path to the trained checkpoint (.pt) saved by the training script")
-    parser.add_argument("--output-dir", type=Path, default=Path("output/belly_predictions"),
-                        help="Where to store the predicted binary masks")
-    parser.add_argument("--overlay-dir", type=Path, default=None,
-                        help="Optional extra directory for RGB overlays (keeps source layout)")
-    parser.add_argument("--batch-size", type=int, default=4,
-                        help="Number of images to process simultaneously")
-    parser.add_argument("--img-size", type=int, default=None,
-                        help="Resize that feeds the network (falls back to checkpoint args)")
-    parser.add_argument("--encoder", type=str, default=None,
-                        help="Encoder name for SMP Unet (defaults to checkpoint args)")
-    parser.add_argument("--encoder-weights", type=str, default=None,
-                        help="Encoder weights, use 'None' for random init (defaults to checkpoint args)")
-    parser.add_argument("--threshold", type=float, default=None,
-                        help="Probability threshold used to binarize the mask (defaults to checkpoint args)")
-    parser.add_argument("--device", type=str, default="auto",
-                        help="Torch device spec (cuda, cpu, cuda:0, ...). 'auto' picks CUDA if available")
-    parser.add_argument("--mask-suffix", type=str, default="_belly_mask",
-                        help="Suffix appended to the source stem when saving masks")
-    parser.add_argument("--overlay-suffix", type=str, default="_overlay",
-                        help="Suffix used for overlay files when --overlay-dir is set")
-    parser.add_argument("--overlay-alpha", type=float, default=0.45,
-                        help="Blending factor for overlay visualization")
-    parser.add_argument("--limit", type=int, default=None,
-                        help="Optional limit for number of processed images (debug)")
+    parser = argparse.ArgumentParser(description="Run inference with SegFormer belly segmenter")
+    parser.add_argument(
+        "--images-dir",
+        type=Path,
+        default=Path("data/karelin_newt_annotated-fixed"),
+        help="Root directory with source images (will be scanned recursively)",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=Path("output/segformer_nvidia_mit-b2_best.pt"),
+        help="Path to the trained SegFormer checkpoint (.pt)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output/belly_predictions"),
+        help="Where to store the predicted binary masks",
+    )
+    parser.add_argument(
+        "--overlay-dir",
+        type=Path,
+        default=None,
+        help="Optional extra directory for RGB overlays (keeps source layout)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=4,
+        help="Number of images to process simultaneously",
+    )
+    parser.add_argument(
+        "--img-size",
+        type=int,
+        default=None,
+        help="Resize that feeds the network (falls back to checkpoint args, else 512)",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Probability threshold used to binarize the mask (defaults to checkpoint args or 0.5)",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        help="Torch device spec (cuda, cpu, cuda:0, ...). 'auto' picks CUDA if available",
+    )
+    parser.add_argument(
+        "--mask-suffix",
+        type=str,
+        default="_belly_mask",
+        help="Suffix appended to the source stem when saving masks",
+    )
+    parser.add_argument(
+        "--overlay-suffix",
+        type=str,
+        default="_overlay",
+        help="Suffix used for overlay files when --overlay-dir is set",
+    )
+    parser.add_argument(
+        "--overlay-alpha",
+        type=float,
+        default=0.45,
+        help="Blending factor for overlay visualization",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Optional limit for number of processed images (debug)",
+    )
     return parser.parse_args()
 
 
@@ -102,7 +146,11 @@ def resolve_arg(value, saved_args: dict, key: str, default):
 def build_transform(img_size: int) -> A.Compose:
     return A.Compose([
         A.Resize(img_size, img_size),
-        A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225), max_pixel_value=255.0),
+        A.Normalize(
+            mean=(0.485, 0.456, 0.406),
+            std=(0.229, 0.224, 0.225),
+            max_pixel_value=255.0,
+        ),
         ToTensorV2(),
     ])
 
@@ -118,7 +166,7 @@ def prepare_batch(paths: Sequence[Path], transform: A.Compose) -> tuple[torch.Te
     originals: List[np.ndarray] = []
     for path in paths:
         with Image.open(path) as img:
-            image = np.array(img.convert("RGB"))
+            image = np.array(ImageOps.exif_transpose(img).convert("RGB"))
         augmented = transform(image=image)
         tensors.append(augmented["image"])
         originals.append(image)
@@ -155,8 +203,15 @@ def save_mask(mask: np.ndarray, src_path: Path, src_root: Path, out_root: Path, 
     return mask_path
 
 
-def save_overlay(image_rgb: np.ndarray, mask: np.ndarray, src_path: Path, src_root: Path,
-                 overlay_root: Path, suffix: str, alpha: float) -> Path:
+def save_overlay(
+    image_rgb: np.ndarray,
+    mask: np.ndarray,
+    src_path: Path,
+    src_root: Path,
+    overlay_root: Path,
+    suffix: str,
+    alpha: float,
+) -> Path:
     relative = src_path.relative_to(src_root)
     destination = overlay_root / relative.parent
     destination.mkdir(parents=True, exist_ok=True)
@@ -166,15 +221,39 @@ def save_overlay(image_rgb: np.ndarray, mask: np.ndarray, src_path: Path, src_ro
     return overlay_path
 
 
+def build_model(device: torch.device) -> SegformerForSemanticSegmentation:
+    model = SegformerForSemanticSegmentation.from_pretrained(
+        "nvidia/segformer-b2-finetuned-ade-512-512",
+        num_labels=1,
+        ignore_mismatched_sizes=True,
+    )
+    return model.to(device)
+
+
+def forward_logits(
+    model: SegformerForSemanticSegmentation,
+    images: torch.Tensor,
+    img_size: int,
+) -> torch.Tensor:
+    outputs = model(pixel_values=images)
+    logits = outputs.logits
+    if logits.ndim == 3:
+        logits = logits.unsqueeze(1)
+
+    logits = F.interpolate(
+        logits,
+        size=(img_size, img_size),
+        mode="bilinear",
+        align_corners=False,
+    )
+    return logits
+
+
 def main() -> None:
     args = parse_args()
 
     checkpoint, saved_args = load_checkpoint(args.checkpoint)
-    img_size = resolve_arg(args.img_size, saved_args, "img_size", 768)
-    encoder = resolve_arg(args.encoder, saved_args, "encoder", "resnet34")
-    encoder_weights = resolve_arg(args.encoder_weights, saved_args, "encoder_weights", "imagenet")
-    if encoder_weights in ("None", "none", None):
-        encoder_weights = None
+    img_size = int(resolve_arg(args.img_size, saved_args, "img_size", 512))
     threshold = float(resolve_arg(args.threshold, saved_args, "threshold", 0.5))
 
     device_str = args.device.lower()
@@ -183,15 +262,10 @@ def main() -> None:
     else:
         device = torch.device(device_str)
 
-    print(f"Loading model: encoder={encoder} weights={encoder_weights} img_size={img_size} device={device}")
+    print(f"Loading SegFormer-B2: img_size={img_size} device={device}")
 
-    model = smp.Unet(
-        encoder_name=encoder,
-        encoder_weights=encoder_weights,
-        in_channels=3,
-        classes=1,
-    )
-    model.load_state_dict(checkpoint["model_state"])
+    model = build_model(device)
+    model.load_state_dict(checkpoint["model_state"], strict=True)
     model.to(device)
     model.eval()
 
@@ -207,22 +281,41 @@ def main() -> None:
 
     saved_masks = 0
     total_batches = math.ceil(len(images) / max(1, args.batch_size))
-    for batch_paths in tqdm(chunked(images, args.batch_size), total=total_batches,
-                            desc="Predicting", unit="batch"):
+    for batch_paths in tqdm(
+        chunked(images, args.batch_size),
+        total=total_batches,
+        desc="Predicting",
+        unit="batch",
+    ):
         batch_tensor, originals = prepare_batch(batch_paths, transform)
         batch_tensor = batch_tensor.to(device)
+
         with torch.no_grad():
-            logits = model(batch_tensor)
+            logits = forward_logits(model, batch_tensor, img_size)
             probs = torch.sigmoid(logits).cpu().numpy()
 
         for prob, original, path in zip(probs, originals, batch_paths):
             mask = postprocess_prediction(prob[0], original.shape[:2], threshold)
             save_mask(mask, path, images_root, masks_root, args.mask_suffix)
-            save_overlay(original, mask, path, images_root, masks_root,
-                         args.overlay_suffix, args.overlay_alpha)
+            save_overlay(
+                original,
+                mask,
+                path,
+                images_root,
+                masks_root,
+                args.overlay_suffix,
+                args.overlay_alpha,
+            )
             if overlay_root is not None and overlay_root != masks_root:
-                save_overlay(original, mask, path, images_root, overlay_root,
-                             args.overlay_suffix, args.overlay_alpha)
+                save_overlay(
+                    original,
+                    mask,
+                    path,
+                    images_root,
+                    overlay_root,
+                    args.overlay_suffix,
+                    args.overlay_alpha,
+                )
             saved_masks += 1
 
     print(f"Saved {saved_masks} mask(s) and overlays to {masks_root}")

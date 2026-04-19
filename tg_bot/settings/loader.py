@@ -1,7 +1,7 @@
 import os
 import torch
-import segmentation_models_pytorch as smp
 from dotenv import load_dotenv
+from transformers import SegformerForSemanticSegmentation
 
 load_dotenv()
 
@@ -11,20 +11,16 @@ SEGMENTATION_MODEL_PATH = os.getenv("SEGMENTATION_MODEL_PATH")
 
 DEVICE = os.getenv("DEVICE", "cpu")
 
-# конфигурация модели
-ENCODER = os.getenv("ENCODER", "resnet34")
-ENCODER_WEIGHTS = os.getenv("ENCODER_WEIGHTS", "imagenet")
 CLASSES = int(os.getenv("CLASSES", 1))
 IMG_SIZE = int(os.getenv("IMG_SIZE", 768))
 THRESHOLD = float(os.getenv("THRESHOLD", 0.5))
 
 
 def build_model():
-    return smp.Unet(
-        encoder_name=ENCODER,
-        encoder_weights=ENCODER_WEIGHTS,
-        in_channels=3,
-        classes=CLASSES,
+    return SegformerForSemanticSegmentation.from_pretrained(
+        "nvidia/segformer-b2-finetuned-ade-512-512",
+        num_labels=CLASSES,
+        ignore_mismatched_sizes=True,
     )
 
 
