@@ -3,11 +3,13 @@ from __future__ import annotations
 import argparse
 import random
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
 import torch.nn.functional as F
-from torch import nn
+from matplotlib import pyplot as plt
+from torch import nn, Tensor
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
@@ -35,11 +37,6 @@ def build_model(checkpoint_path: Path, device: torch.device):
         num_classes=num_classes,
         embedding_dim=embedding_dim,
     ).to(device)
-
-    # model = ResNetClassifierEmbedder(
-    #     num_classes=num_classes,
-    #     embedding_dim=embedding_dim,
-    # ).to(device)
 
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
@@ -97,18 +94,53 @@ def average_precision_at_hits(sorted_relevance: torch.Tensor) -> float:
     return float(ap.item())
 
 
+CMC_CURVE_SAVE_PATH = "cmc-curve.png"
+MAX_CMC_RANK = 10
+
+
+def save_cmc_curve(cmc_curve: torch.Tensor) -> None:
+    ranks = torch.arange(1, len(cmc_curve) + 1).cpu().numpy()
+    values = cmc_curve.cpu().numpy()
+
+    ranks = ranks[:MAX_CMC_RANK]
+    values = values[:MAX_CMC_RANK]
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(ranks, values, marker="o")
+    plt.xlabel("Rank")
+    plt.ylabel("Identification rate")
+    plt.title("CMC curve")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(CMC_CURVE_SAVE_PATH, dpi=200)
+    plt.close()
+
+
+@dataclass
+class EvaluationMetrics:
+    rank1: float
+    rank5: float
+    mean_ap: float
+    num_queries: int
+    gallery_size: int
+    cmc_curve: Tensor
+
+
 def evaluate_retrieval(
     query_embeddings: torch.Tensor,
     query_labels: torch.Tensor,
     gallery_embeddings: torch.Tensor,
     gallery_labels: torch.Tensor,
-):
+) -> EvaluationMetrics:
     similarities = query_embeddings @ gallery_embeddings.T
+
+    gallery_size = int(gallery_embeddings.shape[0])
 
     num_queries = query_embeddings.shape[0]
     rank1_hits = 0
     rank5_hits = 0
     ap_values: list[float] = []
+    cmc_hits = torch.zeros(gallery_size, dtype=torch.float32)
 
     for i in range(num_queries):
         sims = similarities[i]
@@ -127,17 +159,19 @@ def evaluate_retrieval(
         ap = average_precision_at_hits(matches)
         ap_values.append(ap)
 
-    rank1 = rank1_hits / max(1, num_queries)
-    rank5 = rank5_hits / max(1, num_queries)
-    mean_ap = sum(ap_values) / max(1, len(ap_values))
+        relevant_positions = torch.nonzero(matches, as_tuple=False).flatten()
+        if relevant_positions.numel() > 0:
+            first_hit_rank = int(relevant_positions[0].item())
+            cmc_hits[first_hit_rank:] += 1.0
 
-    return {
-        "rank1": rank1,
-        "rank5": rank5,
-        "mAP": mean_ap,
-        "num_queries": num_queries,
-        "gallery_size": int(gallery_embeddings.shape[0]),
-    }
+    return EvaluationMetrics(
+        cmc_curve = cmc_hits / max(1, num_queries),
+        rank1 = rank1_hits / max(1, num_queries),
+        rank5 = rank5_hits / max(1, num_queries),
+        mean_ap = sum(ap_values) / max(1, len(ap_values)),
+        num_queries = num_queries,
+        gallery_size = gallery_size,
+    )
 
 
 def parse_args():
@@ -196,12 +230,18 @@ def main():
         gallery_labels=gallery_labels,
     )
 
+    save_cmc_curve(
+        cmc_curve=metrics.cmc_curve,
+    )
+
+    print(f"CMC curve saved to {CMC_CURVE_SAVE_PATH}")
+
     print("\nRetrieval metrics:")
-    for key, value in metrics.items():
-        if isinstance(value, float):
-            print(f"{key}: {value:.4f}")
-        else:
-            print(f"{key}: {value}")
+    print(f"Rank 1: {metrics.rank1:.4f}")
+    print(f"Rank 5: {metrics.rank5:.4f}")
+    print(f"Mean AP: {metrics.mean_ap:.4f}")
+    print(f"Number of queries: {len(gallery_labels)}")
+    print(f"Gallery size: {len(gallery_labels)}")
 
 
 if __name__ == "__main__":
