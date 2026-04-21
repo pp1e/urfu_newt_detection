@@ -10,3 +10,5 @@ output
 tg_bot/models
 weights/
 dataset/
+experiments/
+inferences/
