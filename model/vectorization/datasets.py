@@ -135,7 +135,6 @@ def build_datasets(
     train_tf: nn.Module,
     val_tf: nn.Module,
     val_ratio: float,
-    is_evaluate: bool = False,
     seed: int | None = None,
 ) -> EmbedderDatasets:
     # 1. базовый датасет (без аугментаций)
@@ -169,7 +168,6 @@ def build_datasets(
             class_to_id=class_to_id,
             samples=train_samples,
         ),
-        duplicate_rot180=not is_evaluate,
     )
 
     val_dataset = BellyIdDataset(
@@ -185,5 +183,111 @@ def build_datasets(
     return EmbedderDatasets(
         train=train_dataset,
         val=val_dataset,
+        class_to_id=class_to_id,
+    )
+
+
+@dataclass
+class EvaluationDatasets:
+    gallery: BellyIdDataset
+    query: BellyIdDataset
+    class_to_id: dict[str, int]
+
+
+def build_evaluation_datasets(
+    data_root: Path,
+    transform: nn.Module,
+    seed: int | None = None,
+) -> EvaluationDatasets:
+    base_dataset = BellyIdDataset(
+        data_root,
+        transform=transform,
+        min_images_per_class=2,
+        duplicate_rot180=False,
+    )
+
+    if base_dataset.class_to_id is None:
+        raise RuntimeError("class_to_id was not initialized")
+
+    # группируем sample-ы по class_name
+    samples_by_class: dict[str, list[Sample]] = {}
+    for sample in base_dataset.samples:
+        samples_by_class.setdefault(sample.class_name, []).append(sample)
+
+    random = Random(seed)
+
+    gallery_samples: list[Sample] = []
+    query_samples: list[Sample] = []
+
+    kept_class_names: list[str] = []
+
+    for class_name in sorted(samples_by_class.keys()):
+        class_samples = samples_by_class[class_name][:]
+
+        # перемешиваем изображения внутри особи воспроизводимо
+        random.shuffle(class_samples)
+
+        if len(class_samples) < 2:
+            continue
+
+        gallery_count = max(1, len(class_samples) // 2)
+
+        gallery_part = class_samples[:gallery_count]
+        query_part = class_samples[gallery_count:]
+
+        if not query_part:
+            continue
+
+        gallery_samples.extend(gallery_part)
+        query_samples.extend(query_part)
+        kept_class_names.append(class_name)
+
+    if not kept_class_names:
+        raise RuntimeError(
+            "No valid classes for retrieval evaluation. "
+            "Need at least one class with enough images for both gallery and query."
+        )
+
+    # делаем новый компактный mapping только по реально оставшимся классам
+    class_to_id = {class_name: idx for idx, class_name in enumerate(kept_class_names)}
+
+    def remap_samples(samples: list[Sample]) -> list[Sample]:
+        remapped: list[Sample] = []
+        for sample in samples:
+            remapped.append(
+                Sample(
+                    path=sample.path,
+                    class_id=class_to_id[sample.class_name],
+                    class_name=sample.class_name,
+                )
+            )
+        return remapped
+
+    gallery_samples = remap_samples(gallery_samples)
+    query_samples = remap_samples(query_samples)
+
+    gallery_dataset = BellyIdDataset(
+        data_root,
+        transform=transform,
+        samples_with_id_mapping=SamplesWithIdMapping(
+            samples=gallery_samples,
+            class_to_id=class_to_id,
+        ),
+        duplicate_rot180=False,
+    )
+
+    query_dataset = BellyIdDataset(
+        data_root,
+        transform=transform,
+        samples_with_id_mapping=SamplesWithIdMapping(
+            samples=query_samples,
+            class_to_id=class_to_id,
+        ),
+        duplicate_rot180=False,
+    )
+
+    return EvaluationDatasets(
+        gallery=gallery_dataset,
+        query=query_dataset,
         class_to_id=class_to_id,
     )
