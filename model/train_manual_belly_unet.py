@@ -216,8 +216,8 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion, device: torch.devi
             total_loss += loss.item()
 
             probs = torch.sigmoid(logits)
-            dice_scores.append(dice_coefficient(probs, masks).item())
             preds = (probs > threshold).float()
+            dice_scores.append(dice_coefficient(preds, masks).item())
             iou_scores.append(iou_score(preds, masks).item())
 
     mean_loss = total_loss / max(1, len(loader))
